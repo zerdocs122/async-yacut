@@ -1,125 +1,119 @@
 import asyncio
 import os
 import urllib.parse
+from http import HTTPStatus
 
 import aiohttp
 from dotenv import load_dotenv
 
+from settings import Config
+
 load_dotenv()
 
-API_HOST = 'https://cloud-api.yandex.net/'
-API_VERSION = 'v1'
+API_BASE_URL = f'{Config.API_HOST}{Config.API_VERSION}'
+DISK_INFO_URL = f'{API_BASE_URL}/disk/'
+UPLOAD_URL = f'{API_BASE_URL}/disk/resources/upload'
+DOWNLOAD_URL = f'{API_BASE_URL}/disk/resources/download'
 DISK_TOKEN = os.environ.get('DISK_TOKEN')
 
-AUTH_HEADERS = {
-    'Authorization': f'OAuth {DISK_TOKEN}'
-}
+AUTH_HEADERS = {'Authorization': f'OAuth {DISK_TOKEN}'}
 
 
 async def get_disk_info():
     """Получить информацию о Диске."""
-    url = f'{API_HOST}{API_VERSION}/disk/'
-
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=AUTH_HEADERS) as response:
-            if response.status == 200:
+        async with session.get(DISK_INFO_URL,
+                               headers=AUTH_HEADERS) as response:
+            if response.status == HTTPStatus.OK:
                 return await response.json()
-            else:
-                return None
+            raise Exception(
+                f'Failed to get disk info: status {response.status}')
 
 
 async def get_upload_url(filename, overwrite=True):
     """Получить URL для загрузки файла."""
-    url = f'{API_HOST}{API_VERSION}/disk/resources/upload'
     params = {
         'path': f'app: /{filename}',
         'overwrite': str(overwrite).lower()
     }
-
     async with aiohttp.ClientSession() as session:
-        async with session.get(url,
+        async with session.get(UPLOAD_URL,
                                headers=AUTH_HEADERS,
                                params=params) as response:
-            if response.status == 200:
-                data = await response.json()
-                return data.get('href')
-            else:
-                return None
+            if response.status == HTTPStatus.OK:
+                return (await response.json()).get('href')
+            raise Exception(
+                f'Failed to get upload URL for {filename}: '
+                f'status {response.status}')
 
 
 async def upload_file(upload_url, file_content):
     """Загрузить файл на Диск по полученному URL."""
     async with aiohttp.ClientSession() as session:
         async with session.put(upload_url, data=file_content) as response:
-            if response.status == 201:
+            if response.status == HTTPStatus.CREATED:
                 location = response.headers.get('Location', '')
-                # Декодируем URL и убираем префикс /disk
-                location = urllib.parse.unquote(location).replace('/disk', '')
-                return location
-            else:
-                return None
+                return urllib.parse.unquote(location).replace('/disk', '')
+            raise Exception(
+                f'Failed to upload file: status {response.status}')
 
 
 async def get_download_link(file_path):
     """Получить ссылку для скачивания файла."""
-    url = f'{API_HOST}{API_VERSION}/disk/resources/download'
     params = {'path': file_path}
-
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=AUTH_HEADERS,
+        async with session.get(DOWNLOAD_URL,
+                               headers=AUTH_HEADERS,
                                params=params) as response:
-            if response.status == 200:
-                data = await response.json()
-                return data.get('href')
-            else:
-                return None
+            if response.status == HTTPStatus.OK:
+                return (await response.json()).get('href')
+            raise Exception(
+                f'Failed to get download link for {file_path}: '
+                f'status {response.status}')
 
 
 async def upload_multiple_files(files):
     """Асинхронная загрузка нескольких файлов."""
-    results = []
-
-    tasks = []
-    for file in files:
-        if file and file.filename:
-            task = asyncio.create_task(
-                upload_single_file(file.filename, file.read())
-            )
-            tasks.append(task)
-
-    if tasks:
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                results[i] = {
-                    'filename': files[i].filename,
-                    'error': str(result)
-                }
-            elif result:
-                results[i] = {
-                    'filename': files[i].filename,
-                    'path': result
-                }
-            else:
-                results[i] = {
-                    'filename': files[i].filename,
-                    'error': 'Failed to upload file'
-                }
-
-    return results
+    tasks = [
+        asyncio.create_task(
+            upload_single_file(file.filename, file.read())
+        )
+        for file in files if file and file.filename
+    ]
+    if not tasks:
+        return []
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    return [
+        {
+            'filename': files[i].filename,
+            'error': str(result) if isinstance(result, Exception)
+            else 'Failed to upload file' if not result else None,
+            'path': result if not isinstance(result, Exception) and result
+            else None
+        }
+        for i, result in enumerate(results)
+    ]
 
 
 async def upload_single_file(filename, file_content):
     """Загрузить один файл на Диск."""
-    # Получаем URL для загрузки
-    upload_url = await get_upload_url(filename)
-    if not upload_url:
-        raise Exception(f"Failed to get upload URL for {filename}")
+    return await upload_file(
+        await get_upload_url(filename), file_content)
 
-    # Загружаем файл
-    location = await upload_file(upload_url, file_content)
-    if not location:
-        raise Exception(f"Failed to upload {filename}")
 
-    return location
+def upload_multiple_files_sync(files):
+    """Синхронная обёртка для загрузки файлов."""
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(upload_multiple_files(files))
+    finally:
+        loop.close()
+
+
+def get_file_download_link_sync(file_path):
+    """Синхронная обёртка для получения ссылки на скачивание."""
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(get_download_link(file_path))
+    finally:
+        loop.close()

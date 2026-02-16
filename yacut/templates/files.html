@@ -19,11 +19,9 @@
           <div>
             <div>
               {{ form.files(class="form-control form-control-lg py-2 mb-3", placeholder="Выберите файлы") }}
-              {% if form.files.errors %}
-                {% for error in form.files.errors %}
-                  <p><span style="color:red">{{ error }}</span></p>
-                {% endfor %}
-              {% endif %}
+              {% for error in form.files.errors %}
+                <p><span style="color:red">{{ error }}</span></p>
+              {% endfor %}
             </div>
 
             {{ form.submit(class="btn btn-primary") }}
@@ -35,46 +33,26 @@
     </div>
   </div>
 
-  {% with messages = get_flashed_messages() %}
-    {% if messages %}
-      <div class="container">
-        <div class="row">
-          <div class="col-sm">
-          </div>
-          <div class="col-sm">
-            {% for message in messages %}
-              <div class="alert alert-info text-center">
-                {{ message }}
-              </div>
-            {% endfor %}
-          </div>
-          <div class="col-sm">
-          </div>
-        </div>
-      </div>
-    {% endif %}
-  {% endwith %}
-
   {% if uploaded_files %}
-  <div class="container mt-5">
-    <h3 class="text-center mb-4">Загруженные файлы</h3>
-    <table class="table table-bordered">
-      <thead>
-        <tr>
-          <th>Имя файла</th>
-          <th>Короткая ссылка</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for file in uploaded_files %}
-        <tr>
-          <td>{{ file.filename }}</td>
-          <td><a href="{{ file.short_link }}" target="_blank">{{ file.short_link }}</a></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+    <div class="container mt-5">
+      <h3 class="text-center mb-4">Загруженные файлы</h3>
+      <table class="table table-bordered">
+        <thead>
+          <tr>
+            <th>Имя файла</th>
+            <th>Короткая ссылка</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for file in uploaded_files %}
+            <tr>
+              <td>{{ file.filename }}</td>
+              <td><a href="{{ file.short_link }}" target="_blank">{{ file.short_link }}</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% endif %}
 
 </section>

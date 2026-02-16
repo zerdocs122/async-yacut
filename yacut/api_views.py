@@ -1,10 +1,18 @@
 import re
+from http import HTTPStatus
 
 from flask import jsonify, request
 
-from . import app, db
+from . import app
 from .error_handlers import InvalidAPIUsage
-from .models import URLMap, get_unique_short_id
+from .models import ID_EXISTS_MESSAGE, SHORT_MAX_LENGTH, SHORT_PATTERN, URLMap
+
+# Сообщения об ошибках API
+EMPTY_REQUEST_MESSAGE = 'Отсутствует тело запроса'
+MISSING_URL_MESSAGE = '"url" является обязательным полем!'
+INVALID_URL_MESSAGE = 'Указано недопустимое имя для короткой ссылки'
+ID_NOT_FOUND_MESSAGE = 'Указанный id не найден'
+RESERVED_ID = 'files'
 
 
 @app.route('/api/id/', methods=['POST'])
@@ -13,67 +21,41 @@ def create_short_link():
     data = request.get_json(force=True, silent=True)
 
     if not data:
-        raise InvalidAPIUsage('Отсутствует тело запроса')
+        raise InvalidAPIUsage(EMPTY_REQUEST_MESSAGE)
 
-    url = data.get('url')
-    custom_id = data.get('custom_id')
+    if 'url' not in data:
+        raise InvalidAPIUsage(MISSING_URL_MESSAGE)
 
-    if not url:
-        raise InvalidAPIUsage('"url" является обязательным полем!')
+    url = data['url']
+    short = data.get('custom_id')
 
-    # Проверка валидности URL
-    url_pattern = re.compile(
-        r'^https?://'  # http:// or https://
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
-        r'localhost|'  # localhost...
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
-        r'(?::\d+)?'  # optional port
-        r'(?:/?|[/?]\S+)$',
-        re.IGNORECASE
-    )
+    if short:
+        if short == RESERVED_ID:
+            raise InvalidAPIUsage(ID_EXISTS_MESSAGE)
 
-    if not url_pattern.match(url):
-        raise InvalidAPIUsage('Указано недопустимое имя для короткой ссылки')
+        if len(short) > SHORT_MAX_LENGTH or not re.match(SHORT_PATTERN, short):
+            raise InvalidAPIUsage(INVALID_URL_MESSAGE)
 
-    if custom_id:
-        if custom_id == 'files':
-            raise InvalidAPIUsage(
-                'Предложенный вариант короткой ссылки уже существует.')
+        if URLMap.get_by_short(short):
+            raise InvalidAPIUsage(ID_EXISTS_MESSAGE)
 
-        if len(custom_id) > 16 or not re.match(r'^[a-zA-Z0-9]+$', custom_id):
-            raise InvalidAPIUsage(
-                'Указано недопустимое имя для короткой ссылки')
-
-        existing_url = URLMap.query.filter_by(short=custom_id).first()
-        if existing_url:
-            raise InvalidAPIUsage(
-                'Предложенный вариант короткой ссылки уже существует.')
-        short_id = custom_id
-    else:
-        while True:
-            short_id = get_unique_short_id()
-            if not URLMap.query.filter_by(short=short_id).first():
-                break
-
-    new_url = URLMap(original=url, short=short_id)
-    db.session.add(new_url)
-    db.session.commit()
+    try:
+        new_url = URLMap.create(url, short)
+    except ValueError as e:
+        raise InvalidAPIUsage(str(e))
 
     return jsonify({
         'url': url,
-        'short_link': f'{request.host_url}{short_id}'
-    }), 201
+        'short_link': new_url.get_short_url()
+    }), HTTPStatus.CREATED
 
 
-@app.route('/api/id/<short_id>/', methods=['GET'])
-def get_original_url(short_id):
+@app.route('/api/id/<short>/', methods=['GET'])
+def get_original_url(short):
     """API эндпоинт для получения оригинальной ссылки."""
-    url_map = URLMap.query.filter_by(short=short_id).first()
+    url_map = URLMap.get_by_short(short)
 
     if not url_map:
-        raise InvalidAPIUsage('Указанный id не найден', 404)
-
-    if url_map.original.startswith('file:'):
-        return jsonify({'url': f'file: {url_map.original[5:]}'})
+        raise InvalidAPIUsage(ID_NOT_FOUND_MESSAGE, HTTPStatus.NOT_FOUND)
 
     return jsonify({'url': url_map.original})
