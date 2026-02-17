@@ -22,26 +22,15 @@
       {% if messages %}
         <div class="container">
           <div class="row">
-            <div class="col-sm">
-            </div>
-            <div class="col-sm">
+            <div class="col-sm-3"></div>
+            <div class="col-sm-6">
               {% for message in messages %}
                 <div class="alert alert-info text-center">
-                  {% if 'http://' in message or 'https://' in message %}
-                    {% if 'Ваша короткая ссылка:' in message %}
-                      {% set link = message.split(': ')[1] %}
-                      Ваша короткая ссылка: <a href="{{ link }}" target="_blank">{{ link }}</a>
-                    {% else %}
-                      <a href="{{ message }}" target="_blank">{{ message }}</a>
-                    {% endif %}
-                  {% else %}
-                    {{ message }}
-                  {% endif %}
+                  {{ message }}
                 </div>
               {% endfor %}
             </div>
-            <div class="col-sm">
-            </div>
+            <div class="col-sm-3"></div>
           </div>
         </div>
       {% endif %}
@@ -50,3 +39,4 @@
     <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
   </body>
 </html>
+

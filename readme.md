@@ -7,7 +7,7 @@ git clone https://github.com/yandex-praktikum/async-yacut.git
 ```
 
 ```
-cd yacut
+cd async-yacut
 ```
 
 Cоздать и активировать виртуальное окружение:
@@ -61,7 +61,7 @@ flask run
 ```
 
 После запуска сервера API документация доступна по адресу:
-http://localhost:5000/swagger
+[Swagger UI](http://localhost:5000/swagger)
 
 ### Технологический стек:
 
@@ -75,4 +75,6 @@ http://localhost:5000/swagger
 
 ### Автор:
 
-Михаил Анисимов ([GitHub](https://github.com/zerdocs122))
+Михаил Анисимов
+- [GitHub](https://github.com/zerdocs122)
+- [Email](Dogsig22@gmail@gmail.com)

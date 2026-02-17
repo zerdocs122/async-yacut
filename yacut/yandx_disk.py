@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 
 from settings import Config
 
+from .constants import (DISK_INFO_ERROR, DOWNLOAD_LINK_ERROR,
+                        UPLOAD_FAILED_MESSAGE, UPLOAD_FILE_ERROR,
+                        UPLOAD_URL_ERROR)
+
 load_dotenv()
 
 API_BASE_URL = f'{Config.API_HOST}{Config.API_VERSION}'
@@ -26,8 +30,7 @@ async def get_disk_info():
                                headers=AUTH_HEADERS) as response:
             if response.status == HTTPStatus.OK:
                 return await response.json()
-            raise Exception(
-                f'Failed to get disk info: status {response.status}')
+            raise RuntimeError(DISK_INFO_ERROR.format(response.status))
 
 
 async def get_upload_url(filename, overwrite=True):
@@ -42,9 +45,8 @@ async def get_upload_url(filename, overwrite=True):
                                params=params) as response:
             if response.status == HTTPStatus.OK:
                 return (await response.json()).get('href')
-            raise Exception(
-                f'Failed to get upload URL for {filename}: '
-                f'status {response.status}')
+            raise RuntimeError(
+                UPLOAD_URL_ERROR.format(filename, response.status))
 
 
 async def upload_file(upload_url, file_content):
@@ -54,8 +56,7 @@ async def upload_file(upload_url, file_content):
             if response.status == HTTPStatus.CREATED:
                 location = response.headers.get('Location', '')
                 return urllib.parse.unquote(location).replace('/disk', '')
-            raise Exception(
-                f'Failed to upload file: status {response.status}')
+            raise RuntimeError(UPLOAD_FILE_ERROR.format(response.status))
 
 
 async def get_download_link(file_path):
@@ -67,9 +68,8 @@ async def get_download_link(file_path):
                                params=params) as response:
             if response.status == HTTPStatus.OK:
                 return (await response.json()).get('href')
-            raise Exception(
-                f'Failed to get download link for {file_path}: '
-                f'status {response.status}')
+            raise RuntimeError(
+                DOWNLOAD_LINK_ERROR.format(file_path, response.status))
 
 
 async def upload_multiple_files(files):
@@ -78,27 +78,27 @@ async def upload_multiple_files(files):
         asyncio.create_task(
             upload_single_file(file.filename, file.read())
         )
-        for file in files if file and file.filename
+        for file in files
     ]
-    if not tasks:
-        return []
-    results = await asyncio.gather(*tasks, return_exceptions=True)
     return [
         {
             'filename': files[i].filename,
             'error': str(result) if isinstance(result, Exception)
-            else 'Failed to upload file' if not result else None,
+            else UPLOAD_FAILED_MESSAGE if not result else None,
             'path': result if not isinstance(result, Exception) and result
             else None
         }
-        for i, result in enumerate(results)
+        for i, result in enumerate(await asyncio.gather(*tasks))
     ]
 
 
 async def upload_single_file(filename, file_content):
     """Загрузить один файл на Диск."""
-    return await upload_file(
-        await get_upload_url(filename), file_content)
+    try:
+        return await upload_file(
+            await get_upload_url(filename), file_content)
+    except RuntimeError as e:
+        return e
 
 
 def upload_multiple_files_sync(files):
@@ -117,3 +117,14 @@ def get_file_download_link_sync(file_path):
         return loop.run_until_complete(get_download_link(file_path))
     finally:
         loop.close()
+
+
+def process_file_result(result):
+    """Обработать результат загрузки файла и получить download_link."""
+    file_path = result['path']
+    download_link = get_file_download_link_sync(file_path)
+    return {
+        'filename': result['filename'],
+        'file_path': file_path,
+        'download_link': download_link
+    }

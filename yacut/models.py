@@ -1,15 +1,14 @@
 import random
-import string
+import re
 from datetime import datetime
 
-from . import db
+from flask import url_for
 
-SHORT_LENGTH = 6
-SHORT_MAX_LENGTH = 16
-SHORT_PATTERN = r'^[a-zA-Z0-9]+$'
-ID_EXISTS_MESSAGE = 'Предложенный вариант короткой ссылки уже существует.'
-CHARACTERS = string.ascii_letters + string.digits
-MAX_ORIGINAL_LENGTH = 2048
+from . import db
+from .constants import (CHARACTERS, ENDPOINT, FAILED_MESSAGE, FILE_PREFIX,
+                        ID_EXISTS_MESSAGE, INVALID_URL_MESSAGE, MAX_ATTEMPTS,
+                        MAX_ORIGINAL_LENGTH, RESERVED_WORDS, SHORT_LENGTH,
+                        SHORT_MAX_LENGTH, SHORT_PATTERN, URL_TOO_LONG_MESSAGE)
 
 
 class URLMap(db.Model):
@@ -22,23 +21,38 @@ class URLMap(db.Model):
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
 
     @staticmethod
-    def get_by_short(short):
+    def get_short(short):
         """Получить запись по короткому идентификатору."""
         return URLMap.query.filter_by(short=short).first()
 
     @staticmethod
     def create(original, short=None):
         """Создать новую запись в базе данных."""
-        if short is None:
-            while True:
-                chars = CHARACTERS
-                short = ''.join(random.choice(chars)
-                                for _ in range(SHORT_LENGTH))
-                if not URLMap.query.filter_by(short=short).first():
-                    break
-        else:
-            if URLMap.query.filter_by(short=short).first():
+        if short:
+            if short in RESERVED_WORDS:
                 raise ValueError(ID_EXISTS_MESSAGE)
+
+            if len(short) > SHORT_MAX_LENGTH or not re.match(SHORT_PATTERN,
+                                                             short):
+                raise ValueError(INVALID_URL_MESSAGE)
+
+            if URLMap.get_short(short):
+                raise ValueError(ID_EXISTS_MESSAGE)
+        else:
+            if len(original) > MAX_ORIGINAL_LENGTH:
+                raise ValueError(URL_TOO_LONG_MESSAGE)
+            short = URLMap.generate_short()
+
+        new_url = URLMap(original=original, short=short)
+        db.session.add(new_url)
+        db.session.commit()
+        return new_url
+
+    @staticmethod
+    def create_file_entry(file_path):
+        """Создать запись для файла на Яндекс Диске."""
+        short = URLMap.generate_short()
+        original = f'{FILE_PREFIX}{file_path}'
         new_url = URLMap(original=original, short=short)
         db.session.add(new_url)
         db.session.commit()
@@ -46,27 +60,15 @@ class URLMap(db.Model):
 
     def get_short_url(self):
         """Получить полную короткую ссылку."""
-        from flask import url_for
-        return url_for('redirect_to_original',
+        return url_for(ENDPOINT,
                        short=self.short,
                        _external=True)
 
     @staticmethod
     def generate_short():
         """Генерирует уникальный короткий идентификатор."""
-        while True:
-            short = ''.join(random.choice(CHARACTERS)
-                            for _ in range(SHORT_LENGTH))
-            if not URLMap.get_by_short(short):
+        for _ in range(MAX_ATTEMPTS):
+            short = ''.join(random.choices(CHARACTERS, k=SHORT_LENGTH))
+            if short not in RESERVED_WORDS and not URLMap.get_short(short):
                 return short
-
-    @staticmethod
-    def create_file_entry(file_path, short):
-        """Создает запись о файле в базе данных."""
-        new_url = URLMap(
-            original=f'file: {file_path}',
-            short=short
-        )
-        db.session.add(new_url)
-        db.session.commit()
-        return new_url
+        raise RuntimeError(FAILED_MESSAGE)
