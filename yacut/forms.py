@@ -4,44 +4,48 @@ from wtforms import StringField, SubmitField, TextAreaField
 from wtforms.validators import (URL, DataRequired, Length, Optional, Regexp,
                                 ValidationError)
 
-from .constants import (CREATE_BUTTON, FILE_LABEL, FILE_REQUIRED_MESSAGE,
-                        ID_EXISTS_MESSAGE, INVALID_URL_MESSAGE, MESSAGE_WORDS,
-                        ORIGINAL_LINK_LABEL, REQUIRED_FIELD_MESSAGE,
-                        RESERVED_WORDS, SHORT_LABEL, SHORT_MAX_LENGTH,
-                        SHORT_PATTERN, UPLOAD_BUTTON)
+from .constants import (MAX_ORIGINAL_LENGTH, SHORT_EXISTS, SHORT_INVALID_URL,
+                        SHORT_MAX_LENGTH, SHORT_PATTERN, SHORT_RESERVED)
 from .models import URLMap
+
+# Form label messages
+ORIGINAL_LINK_LABEL = 'Длинная ссылка'
+SHORT_LABEL = 'Ваш вариант короткой ссылки'
+FILE_LABEL = 'Файл не выбран'
+CREATE_BUTTON = 'Создать'
+UPLOAD_BUTTON = 'Загрузить'
+
+# Validation messages
+REQUIRED_FIELD = 'Обязательное поле'
+SHORT_VALID_CHARS = 'Только буквы и цифры'
+FILE_REQUIRED = 'Выберите файл для загрузки'
 
 
 class MainForm(FlaskForm):
     """Форма главной страницы."""
-
     original_link = TextAreaField(
         ORIGINAL_LINK_LABEL,
-        validators=[DataRequired(message=REQUIRED_FIELD_MESSAGE),
-                    URL(message=INVALID_URL_MESSAGE),
-                    Length(max=2048)])
-
+        validators=[DataRequired(message=REQUIRED_FIELD),
+                    URL(message=SHORT_INVALID_URL),
+                    Length(max=MAX_ORIGINAL_LENGTH)])
     custom_id = StringField(
         SHORT_LABEL,
         validators=[Length(max=SHORT_MAX_LENGTH), Optional(),
                     Regexp(SHORT_PATTERN,
-                           message=MESSAGE_WORDS)])
+                           message=SHORT_VALID_CHARS)])
 
     submit = SubmitField(CREATE_BUTTON)
 
     def validate_custom_id(self, field):
         """Валидатор для проверки зарезервированных слов и уникальности."""
-        if field.data and field.data in RESERVED_WORDS:
-            raise ValidationError(ID_EXISTS_MESSAGE)
-
-        if field.data and URLMap.get_short(field.data):
-            raise ValidationError(ID_EXISTS_MESSAGE)
+        if (field.data and (field.data in SHORT_RESERVED or
+                            URLMap.get_url_map(field.data))):
+            raise ValidationError(SHORT_EXISTS)
 
 
 class FileForm(FlaskForm):
     """Форма для загрузки файлов."""
-
     files = MultipleFileField(FILE_LABEL,
                               validators=[FileRequired(
-                                  message=FILE_REQUIRED_MESSAGE)])
+                                  message=FILE_REQUIRED)])
     submit = SubmitField(UPLOAD_BUTTON)

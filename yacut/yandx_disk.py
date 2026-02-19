@@ -8,9 +8,12 @@ from dotenv import load_dotenv
 
 from settings import Config
 
-from .constants import (DISK_INFO_ERROR, DOWNLOAD_LINK_ERROR,
-                        UPLOAD_FAILED_MESSAGE, UPLOAD_FILE_ERROR,
-                        UPLOAD_URL_ERROR)
+# Yandex Disk API error messages
+DISK_INFO_ERROR = 'Не удалось получить информацию о Диске: статус {}'
+UPLOAD_URL_ERROR = 'Не удалось получить URL для загрузки {}: статус {}'
+UPLOAD_FILE_ERROR = 'Не удалось загрузить файл: статус {}'
+DOWNLOAD_LINK_ERROR = 'Не удалось получить ссылку на скачивание {}: статус {}'
+UPLOAD_FAILED = 'Ошибка при загрузке файла'
 
 load_dotenv()
 
@@ -80,16 +83,28 @@ async def upload_multiple_files(files):
         )
         for file in files
     ]
-    return [
-        {
-            'filename': files[i].filename,
-            'error': str(result) if isinstance(result, Exception)
-            else UPLOAD_FAILED_MESSAGE if not result else None,
-            'path': result if not isinstance(result, Exception) and result
-            else None
-        }
-        for i, result in enumerate(await asyncio.gather(*tasks))
-    ]
+    return await asyncio.gather(*tasks)
+
+
+async def upload_files_and_get_urls(files):
+    """Загрузить файлы на Яндекс Диск и получить их URL."""
+    upload_results = await upload_multiple_files(files)
+    results = []
+    for i, result in enumerate(upload_results):
+        filename = files[i].filename
+        if isinstance(result, Exception) or not result:
+            continue
+        file_path = result
+        try:
+            download_link = await get_download_link(file_path)
+            results.append({
+                'filename': filename,
+                'file_path': file_path,
+                'download_link': download_link
+            })
+        except Exception:
+            continue
+    return results
 
 
 async def upload_single_file(filename, file_content):
@@ -97,7 +112,7 @@ async def upload_single_file(filename, file_content):
     try:
         return await upload_file(
             await get_upload_url(filename), file_content)
-    except RuntimeError as e:
+    except Exception as e:
         return e
 
 
@@ -110,6 +125,15 @@ def upload_multiple_files_sync(files):
         loop.close()
 
 
+def get_files_yandex_disk_urls(files):
+    """Загрузить файлы на Яндекс Диск и получить их URL."""
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(upload_files_and_get_urls(files))
+    finally:
+        loop.close()
+
+
 def get_file_download_link_sync(file_path):
     """Синхронная обёртка для получения ссылки на скачивание."""
     loop = asyncio.new_event_loop()
@@ -117,14 +141,3 @@ def get_file_download_link_sync(file_path):
         return loop.run_until_complete(get_download_link(file_path))
     finally:
         loop.close()
-
-
-def process_file_result(result):
-    """Обработать результат загрузки файла и получить download_link."""
-    file_path = result['path']
-    download_link = get_file_download_link_sync(file_path)
-    return {
-        'filename': result['filename'],
-        'file_path': file_path,
-        'download_link': download_link
-    }
