@@ -8,14 +8,12 @@ from .constants import (MAX_ORIGINAL_LENGTH, SHORT_EXISTS, SHORT_INVALID_URL,
                         SHORT_MAX_LENGTH, SHORT_PATTERN, SHORT_RESERVED)
 from .models import URLMap
 
-# Form label messages
 ORIGINAL_LINK_LABEL = 'Длинная ссылка'
 SHORT_LABEL = 'Ваш вариант короткой ссылки'
 FILE_LABEL = 'Файл не выбран'
 CREATE_BUTTON = 'Создать'
 UPLOAD_BUTTON = 'Загрузить'
 
-# Validation messages
 REQUIRED_FIELD = 'Обязательное поле'
 SHORT_VALID_CHARS = 'Только буквы и цифры'
 FILE_REQUIRED = 'Выберите файл для загрузки'
@@ -33,13 +31,12 @@ class MainForm(FlaskForm):
         validators=[Length(max=SHORT_MAX_LENGTH), Optional(),
                     Regexp(SHORT_PATTERN,
                            message=SHORT_VALID_CHARS)])
-
     submit = SubmitField(CREATE_BUTTON)
 
     def validate_custom_id(self, field):
         """Валидатор для проверки зарезервированных слов и уникальности."""
         if (field.data and (field.data in SHORT_RESERVED or
-                            URLMap.get_url_map(field.data))):
+                            URLMap.get(field.data))):
             raise ValidationError(SHORT_EXISTS)
 
 

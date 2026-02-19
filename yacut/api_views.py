@@ -20,20 +20,18 @@ def create_short_link():
     if 'url' not in data:
         raise InvalidAPIUsage(MISSING_URL)
     try:
-        return jsonify({
-            'url': data['url'],
-            'short_link': URLMap.create(
-                data['url'],
-                data.get('custom_id')
-            ).get_short_url()
-        }), HTTPStatus.CREATED
-    except Exception as e:
-        raise InvalidAPIUsage(str(e))
+        url_map = URLMap.create(data['url'], data.get('custom_id'))
+    except ValueError as error:
+        raise InvalidAPIUsage(str(error))
+    return jsonify({
+        'url': data['url'],
+        'short_link': url_map.get_short_url()
+    }), HTTPStatus.CREATED
 
 
 @app.route('/api/id/<short>/', methods=['GET'])
 def get_original_url(short):
     """API эндпоинт для получения оригинальной ссылки."""
-    if not (url_map := URLMap.get_url_map(short)):
+    if not (url_map := URLMap.get(short)):
         raise InvalidAPIUsage(ID_NOT_FOUND, HTTPStatus.NOT_FOUND)
     return jsonify({'url': url_map.original})

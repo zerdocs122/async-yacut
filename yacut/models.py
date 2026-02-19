@@ -10,12 +10,11 @@ from .constants import (CHARACTERS, MAX_ATTEMPTS, MAX_ORIGINAL_LENGTH,
                         SHORT_MAX_LENGTH, SHORT_PATTERN,
                         SHORT_REDIRECT_ENDPOINT, SHORT_RESERVED)
 
-# Error and status messages
-FAILED = (
+SHORT_GENERATION_FAILED = (
     'Не удалось сгенерировать уникальный короткий '
-    'идентификатор (попыток: {})'
+    f'идентификатор (попыток: {MAX_ATTEMPTS})'
 )
-URL_TOO_LONG = 'URL слишком длинный'
+URL_TOO_LONG = f'URL слишком длинный (макс. {MAX_ORIGINAL_LENGTH})'
 
 
 class URLMap(db.Model):
@@ -27,7 +26,7 @@ class URLMap(db.Model):
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
 
     @staticmethod
-    def get_url_map(short):
+    def get(short):
         """Получить запись по короткому идентификатору."""
         return URLMap.query.filter_by(short=short).first()
 
@@ -35,17 +34,16 @@ class URLMap(db.Model):
     def create(original, short=None, skip_short_validation=False,
                skip_url_validation=False, commit=True):
         """Создать новую запись в базе данных."""
+        if not skip_url_validation and len(original) > MAX_ORIGINAL_LENGTH:
+            raise ValueError(URL_TOO_LONG)
         if short:
             if not skip_short_validation:
                 if (len(short) > SHORT_MAX_LENGTH or
                         not re.match(SHORT_PATTERN, short)):
                     raise ValueError(SHORT_INVALID_URL)
-            if short in SHORT_RESERVED or URLMap.get_url_map(short):
-                raise ValueError(SHORT_EXISTS)
+                if short in SHORT_RESERVED or URLMap.get(short):
+                    raise ValueError(SHORT_EXISTS)
         else:
-            if not skip_url_validation:
-                if len(original) > MAX_ORIGINAL_LENGTH:
-                    raise ValueError(URL_TOO_LONG)
             short = URLMap.generate_short()
         new_url = URLMap(original=original, short=short)
         db.session.add(new_url)
@@ -64,6 +62,6 @@ class URLMap(db.Model):
         """Генерирует уникальный короткий идентификатор."""
         for _ in range(MAX_ATTEMPTS):
             short = ''.join(random.choices(CHARACTERS, k=SHORT_LENGTH))
-            if short not in SHORT_RESERVED and not URLMap.get_url_map(short):
+            if short not in SHORT_RESERVED and not URLMap.get(short):
                 return short
-        raise RuntimeError(FAILED.format(MAX_ATTEMPTS))
+        raise RuntimeError(SHORT_GENERATION_FAILED)

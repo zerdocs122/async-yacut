@@ -77,43 +77,35 @@ async def get_download_link(file_path):
 
 async def upload_multiple_files(files):
     """Асинхронная загрузка нескольких файлов."""
-    tasks = [
-        asyncio.create_task(
-            upload_single_file(file.filename, file.read())
-        )
-        for file in files
-    ]
-    return await asyncio.gather(*tasks)
+    return await asyncio.gather(
+        *[
+            asyncio.create_task(
+                upload_single_file(file.filename, file.read())
+            )
+            for file in files
+        ]
+    )
 
 
 async def upload_files_and_get_urls(files):
     """Загрузить файлы на Яндекс Диск и получить их URL."""
     upload_results = await upload_multiple_files(files)
-    results = []
-    for i, result in enumerate(upload_results):
-        filename = files[i].filename
-        if isinstance(result, Exception) or not result:
-            continue
-        file_path = result
-        try:
-            download_link = await get_download_link(file_path)
-            results.append({
-                'filename': filename,
-                'file_path': file_path,
-                'download_link': download_link
-            })
-        except Exception:
-            continue
-    return results
+    return [
+        download_link
+        for download_link in await asyncio.gather(
+            *[
+                get_download_link(file_path)
+                for file_path in upload_results
+                if file_path and not isinstance(file_path, Exception)
+            ]
+        )
+        if download_link
+    ]
 
 
 async def upload_single_file(filename, file_content):
     """Загрузить один файл на Диск."""
-    try:
-        return await upload_file(
-            await get_upload_url(filename), file_content)
-    except Exception as e:
-        return e
+    return await upload_file(await get_upload_url(filename), file_content)
 
 
 def upload_multiple_files_sync(files):
