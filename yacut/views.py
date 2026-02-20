@@ -1,10 +1,8 @@
-import asyncio
 from http import HTTPStatus
 
-import aiohttp
 from flask import abort, flash, redirect, render_template
 
-from . import app, db
+from . import app
 from .constants import SHORT_REDIRECT_ENDPOINT
 from .forms import FileForm, MainForm
 from .models import URLMap
@@ -47,22 +45,25 @@ def files_page():
     if not form.validate_on_submit():
         return render_template('files.html', form=form)
     try:
-        files_info = get_files_yandex_disk_urls(form.files.data)
-    except (RuntimeError, aiohttp.ClientError, asyncio.TimeoutError,
-            OSError, ValueError) as error:
+        download_urls = get_files_yandex_disk_urls(form.files.data)
+    except Exception as error:
         flash(FILE_UPLOAD_ERROR.format(error))
         return render_template('files.html', form=form)
     try:
-        uploaded_files = []
-        for file, download_link in zip(form.files.data, files_info):
-            url_map = URLMap.create(download_link, commit=False)
-            uploaded_files.append(
-                {
-                    'filename': file.filename,
-                    'short_link': url_map.get_short_url(),
-                }
+        urls_count = len(download_urls)
+        last_index = urls_count - 1
+        uploaded_files = [
+            {
+                'filename': file.filename,
+                'short_link': URLMap.create(
+                    download_url,
+                    commit=index == last_index
+                ).get_short_url(),
+            }
+            for index, (file, download_url) in enumerate(
+                zip(form.files.data, download_urls)
             )
-        db.session.commit()
+        ]
         return render_template(
             'files.html',
             form=form,
