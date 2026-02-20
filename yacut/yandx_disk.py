@@ -90,17 +90,13 @@ async def upload_multiple_files(files):
 async def upload_files_and_get_urls(files):
     """Загрузить файлы на Яндекс Диск и получить их URL."""
     upload_results = await upload_multiple_files(files)
-    return [
-        download_link
-        for download_link in await asyncio.gather(
-            *[
-                get_download_link(file_path)
-                for file_path in upload_results
-                if file_path and not isinstance(file_path, Exception)
-            ]
-        )
-        if download_link
+    download_tasks = [
+        get_download_link(file_path)
+        for file_path in upload_results
+        if file_path
     ]
+    download_links = await asyncio.gather(*download_tasks)
+    return [link for link in download_links if link]
 
 
 async def upload_single_file(filename, file_content):

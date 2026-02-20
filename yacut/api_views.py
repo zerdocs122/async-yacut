@@ -21,7 +21,7 @@ def create_short_link():
         raise InvalidAPIUsage(MISSING_URL)
     try:
         url_map = URLMap.create(data['url'], data.get('custom_id'))
-    except ValueError as error:
+    except (ValueError, RuntimeError) as error:
         raise InvalidAPIUsage(str(error))
     return jsonify({
         'url': data['url'],

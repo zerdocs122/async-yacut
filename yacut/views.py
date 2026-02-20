@@ -1,8 +1,10 @@
+import asyncio
 from http import HTTPStatus
 
+import aiohttp
 from flask import abort, flash, redirect, render_template
 
-from . import app
+from . import app, db
 from .constants import SHORT_REDIRECT_ENDPOINT
 from .forms import FileForm, MainForm
 from .models import URLMap
@@ -27,7 +29,7 @@ def index():
             skip_short_validation=True,
             skip_url_validation=False
         )
-    except ValueError as error:
+    except (ValueError, RuntimeError) as error:
         flash(str(error))
         return render_template('index.html', form=form)
 
@@ -46,25 +48,27 @@ def files_page():
         return render_template('files.html', form=form)
     try:
         files_info = get_files_yandex_disk_urls(form.files.data)
-    except RuntimeError as error:
+    except (RuntimeError, aiohttp.ClientError, asyncio.TimeoutError,
+            OSError, ValueError) as error:
         flash(FILE_UPLOAD_ERROR.format(error))
         return render_template('files.html', form=form)
     try:
+        uploaded_files = []
+        for file, download_link in zip(form.files.data, files_info):
+            url_map = URLMap.create(download_link, commit=False)
+            uploaded_files.append(
+                {
+                    'filename': file.filename,
+                    'short_link': url_map.get_short_url(),
+                }
+            )
+        db.session.commit()
         return render_template(
             'files.html',
             form=form,
-            uploaded_files=[
-                {
-                    'filename': file.filename,
-                    'short_link': URLMap.create(
-                        download_link,
-                        commit=True
-                    ).get_short_url()
-                }
-                for file, download_link in zip(form.files.data, files_info)
-            ]
+            uploaded_files=uploaded_files
         )
-    except ValueError as error:
+    except (ValueError, RuntimeError) as error:
         flash(FILE_PROCESS_ERROR.format(error))
         return render_template('files.html', form=form)
 
