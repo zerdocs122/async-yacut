@@ -1,9 +1,15 @@
+# YaCut
+
+Сервис сокращения ссылок с асинхронной загрузкой файлов на Яндекс.Диск.
+Позволяет создавать короткие ссылки для длинных URL и автоматически
+генерировать короткие ссылки для файлов, загружаемых на Яндекс.Диск.
+
 ### Как запустить проект Yacut:
 
 Клонировать репозиторий и перейти в него в командной строке:
 
 ```
-git clone https://github.com/yandex-praktikum/async-yacut.git
+git clone https://github.com/zerdocs122/async-yacut.git
 ```
 
 ```
@@ -72,9 +78,20 @@ flask run
 - Flask-Migrate
 - aiohttp (для асинхронной работы с Яндекс.Диск)
 - SQLite (в режиме разработки)
+- 
+## Структура проекта
+
+| Папка/Файл | Описание |
+|---|---|
+| `yacut/` | Основной код приложения |
+| `tests/` | Тесты проекта |
+| `postman_collection/` | Коллекция запросов для Postman |
+| `settings.py` | Настройки приложения |
+| `requirements.txt` | Зависимости проекта |
+| `pytest.ini` | Конфигурация тестов |
 
 ### Автор:
 
 Михаил Анисимов
 - [GitHub](https://github.com/zerdocs122)
-- [Email](Dogsig22@gmail@gmail.com)
+- [Email](mailto:Dogsig22@gmail.com)
